@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مخطط المهام الزمني التفاعلي - درعه</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            dark: '#030712',
+                            cardBg: 'rgba(10, 20, 47, 0.45)',
+                            blue: '#0055ff',
+                            light: '#4d88ff',
+                            neon: '#00d4ff',
+                            purple: '#8b5cf6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Tajawal', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            background-color: #030611;
+            color: white;
+            font-family: 'Tajawal', sans-serif;
+            overflow-x: hidden;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Glassmorphism Styling */
+        .glass {
+            background: rgba(8, 16, 38, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(0, 85, 255, 0.25);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+        
+        .glass-card {
+            background: linear-gradient(135deg, rgba(0, 85, 255, 0.12) 0%, rgba(0, 212, 255, 0.04) 100%);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 150, 255, 0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .glass-card:hover {
+            border-color: rgba(0, 212, 255, 0.85);
+            box-shadow: 0 0 25px rgba(0, 85, 255, 0.5);
+            transform: translateY(-4px);
+        }
+
+        /* Glowing Cursor Mouse Tracker */
+        #glow {
+            position: fixed;
+            width: 450px;
+            height: 450px;
+            background: radial-gradient(circle, rgba(0, 110, 255, 0.18) 0%, rgba(0,0,0,0) 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            z-index: -1;
+            transition: opacity 0.2s ease;
+        }
+
+        /* Custom Modern Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #050a18; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #0055ff; 
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00d4ff; 
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease forwards;
+        }
+    </style>
+</head>
+<body>
+    <div id="glow"></div>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- أشهر السنة العربية لتحويل التواريخ ---
+        const ARABIC_MONTHS_MAP = {
+            'يناير': '01', 'فبراير': '02', 'مارس': '03', 'أبريل': '04',
+            'مايو': '05', 'يونيو': '06', 'يوليو': '07', 'أغسطس': '08',
+            'سبتمبر': '09', 'أكتوبر': '10', 'نوفمبر': '11', 'ديسمبر': '12'
+        };
+
+        const parseArabicDate = (dateStr) => {
+            if (!dateStr) return 0;
+            try {
+                // مثال: مايو 12, 2026 15:58:17
+                let cleaned = dateStr.replace(/,/g, '').trim();
+                let parts = cleaned.split(/\s+/);
+                if (parts.length >= 3) {
+                    let month = ARABIC_MONTHS_MAP[parts[0]] || '01';
+                    let day = parts[1].padStart(2, '0');
+                    let year = parts[2];
+                    let time = parts[3] || '00:00:00';
+                    return new Date(`${year}-${month}-${day}T${time}`).getTime();
+                }
+                return 0;
+            } catch (e) {
+                return 0;
+            }
+        };
+
+        // --- دالة ذكية ومطورة لقراءة ولصق البيانات المفتوحة للأعمدة كلها ---
+        const parseRawText = (rawText) => {
+            // تقسيم النص بالاعتماد على صيغ تاريخ الإنشاء المميزة
+            const dateRegex = /(يناير|فبراير|مارس|أبريل|مايو|يونيو|يوليو|أغسطس|سبتمبر|أكتوبر|نوفمبر|ديسمبر)\s+\d{1,2},?\s+\d{4}\s+\d{2}:\d{2}:\d{2}/g;
+            let matches = [];
+            let match;
+            while ((match = dateRegex.exec(rawText)) !== null) {
+                matches.push({ index: match.index, text: match[0] });
+            }
+
+            let parsedTasks = [];
+            let startIndex = 0;
+
+            for (let i = 0; i < matches.length; i++) {
+                let chunk = rawText.substring(startIndex, matches[i].index).trim();
+                let createdAt = matches[i].text;
+                startIndex = matches[i].index + matches[i].text.length;
+
+                if (chunk) {
+                    // استخراج المعرّف (أول سلسلة أرقام متتالية)
+                    let idMatch = chunk.match(/^(\d{4,6})\s*/);
+                    let id = idMatch ? idMatch[1] : (chunk.match(/\d{4,6}/) ? chunk.match(/\d{4,6}/)[0] : 'غير معروف');
+                    
+                    // تنظيف النص لمعرفة اسم المهمة
+                    let lines = chunk.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                    let title = 'مهمة بدون عنوان';
+                    if (lines.length > 0) {
+                        // إذا كان السطر الأول يحتوي فقط على الرقم، فالعنوان سيكون في السطر الثاني
+                        if (/^\d{3,6}$/.test(lines[0]) && lines.length > 1) {
+                            title = lines[1];
+                        } else {
+                            // إزالة الرقم من بداية السطر الأول
+                            title = lines[0].replace(/^\d{3,6}\s*/, '').trim();
+                            // إذا أصبح فارغاً وكان هناك سطر آخر
+                            if (!title && lines.length > 1) {
+                                title = lines[1];
+                            }
+                        }
+                        // تنظيف من أي كلمات إضافية قد تلتصق بالاسم
+                        title = title.replace(/(High|Medium|Low|بانتظار الموافقة|مكتمل)/ig, '').trim();
+                    }
+
+                    // استخراج الأولوية
+                    let priority = 'Medium'; // افتراضي
+                    if (/High|عالية|عالي/i.test(chunk)) priority = 'High';
+                    else if (/Low|منخفضة|منخفض/i.test(chunk)) priority = 'Low';
+                    else if (/Medium|متوسطة|متوسط/i.test(chunk)) priority = 'Medium';
+
+                    // استخراج النسبة المئوية للتقدم
+                    let progressMatch = chunk.match(/(\d+)%/);
+                    let progress = progressMatch ? progressMatch[0] : '0%';
+
+                    // استخراج الحالة
+                    let status = 'غير محدد';
+                    if (/مكتمل|تم اكتمال/i.test(chunk)) status = 'مكتمل';
+                    else if (/بانتظار الموافقة/i.test(chunk)) status = 'بانتظار الموافقة';
+                    else if (/قيد التنفيذ/i.test(chunk)) status = 'قيد التنفيذ';
+
+                    // استخراج عدد المرفقات (إذا وجد "مرفقات" أو رقم بجانب رمز المرفقات)
+                    let attachmentsMatch = chunk.match(/(\d+)\s*(مرفق|مرفقات|مرفقاً|attachments)/i);
+                    let attachmentsCount = attachmentsMatch ? attachmentsMatch[1] : "0";
+
+                    // استخراج نطاقات التواريخ (صيغة YYYY-MM-DD)
+                    let datesRegex = /\d{4}-\d{2}-\d{2}/g;
+                    let dates = [];
+                    let dMatch;
+                    while((dMatch = datesRegex.exec(chunk)) !== null) {
+                        dates.push(dMatch[0]);
+                    }
+                    dates = [...new Set(dates)];
+                    let dateRange = dates.length > 0 ? dates.join(' - ') : 'غير محدد';
+
+                    // استخراج الأسماء (المعينون والمالك ومن أنشأها)
+                    // الفلترة بالاعتماد على الأنماط التي تظهر بالصور
+                    let names = lines.filter(line => 
+                        line.includes('السيد سالم') || 
+                        line.includes('عبدالفتاح') || 
+                        line.includes('البراوي') || 
+                        line.includes('هشام ياسين') ||
+                        line.includes('جمال السيد') ||
+                        line.includes('القحطاني')
+                    );
+                    
+                    let owner = names.find(n => n.includes('بسام مسعود')) || 'بسام مسعود السيد سالم';
+                    let creator = names.find(n => !n.includes('بسام مسعود')) || 'محمد ابراهيم عبدالفتاح عرفات';
+                    
+                    // استخراج المعينين الإضافيين
+                    let assignees = [];
+                    if (chunk.includes('المعينون') || chunk.includes('عرض')) {
+                        // استخراج الأسماء المذكورة كنقاط أو بعد كلمة المعينون
+                        assignees = names.filter(n => n !== owner);
+                    }
+                    if (assignees.length === 0) {
+                        assignees = [creator];
+                    }
+
+                    parsedTasks.push({
+                        id,
+                        title: title.substring(0, 100), // عدم تجاوز الطول المناسب
+                        priority,
+                        progress,
+                        status,
+                        attachmentsCount,
+                        owner,
+                        creator,
+                        assignees: [...new Set(assignees)],
+                        dateRange,
+                        parsedDates: dates, // حفظ التواريخ المكتشفة لحساب الأيام بدقة
+                        createdAt,
+                        timestamp: parseArabicDate(createdAt),
+                        rawChunk: chunk
+                    });
+                }
+            }
+            return parsedTasks;
+        };
+
+        const App = () => {
+            const [tasks, setTasks] = useState([]);
+            const [step, setStep] = useState('input'); // 'input', 'ask_more', 'timeline'
+            const [currentInput, setCurrentInput] = useState('');
+            const [selectedTask, setSelectedTask] = useState(null);
+            
+            // الفلاتر النشطة بالخط الزمني
+            const [selectedMonth, setSelectedMonth] = useState('الكل');
+            const [selectedPriority, setSelectedPriority] = useState('الكل');
+            const [searchQuery, setSearchQuery] = useState(''); // إضافة حالة البحث
+            const [showEmptyDaysModal, setShowEmptyDaysModal] = useState(false);
+
+            // فلتر أيام الأسبوع المطلوب لتحديد أيام معينة (الجمعة والسبت مثلاً)
+            const [activeWeekdays, setActiveWeekdays] = useState({
+                0: true, // الأحد
+                1: true, // الإثنين
+                2: true, // الثلاثاء
+                3: true, // الأربعاء
+                4: true, // الخميس
+                5: true, // الجمعة
+                6: true  // السبت
+            });
+
+            const weekdayNames = [
+                { id: 0, name: 'الأحد' },
+                { id: 1, name: 'الإثنين' },
+                { id: 2, name: 'الثلاثاء' },
+                { id: 3, name: 'الأربعاء' },
+                { id: 4, name: 'الخميس' },
+                { id: 5, name: 'الجمعة' },
+                { id: 6, name: 'السبت' }
+            ];
+
+            // تتبع تأثير إضاءة الماوس
+            useEffect(() => {
+                const glow = document.getElementById('glow');
+                const updateGlow = (e) => {
+                    glow.style.left = e.clientX + 'px';
+                    glow.style.top = e.clientY + 'px';
+                };
+                window.addEventListener('mousemove', updateGlow);
+                return () => window.removeEventListener('mousemove', updateGlow);
+            }, []);
+
+            // تصفير وبدء من جديد
+            const handleReset = () => {
+                if(window.confirm("هل أنت متأكد من رغبتك في حذف كافة المهام الحالية والبدء من جديد؟")) {
+                    setTasks([]);
+                    setCurrentInput('');
+                    setSelectedMonth('الكل');
+                    setSelectedPriority('الكل');
+                    setSearchQuery(''); // تصفير البحث
+                    setActiveWeekdays({
+                        0: true, 1: true, 2: true, 3: true, 4: true, 5: true, 6: true
+                    });
+                    setStep('input');
+                }
+            };
+
+            const handleProcessText = () => {
+                if (!currentInput.trim()) return;
+                const newTasks = parseRawText(currentInput);
+                setTasks(prev => [...prev, ...newTasks]);
+                setCurrentInput('');
+                setStep('ask_more');
+            };
+
+            const handleFinish = () => {
+                // ترتيب تصاعدي من الأقدم للأحدث (حتى يظهر الأقدم بالأسفل والأحدث بالأعلى)
+                const sorted = [...tasks].sort((a, b) => a.timestamp - b.timestamp);
+                setTasks(sorted);
+                setStep('timeline');
+            };
+
+            // حساب الإحصائيات الشهرية وتوزيع المهام
+            const monthlyStats = useMemo(() => {
+                const stats = {};
+                tasks.forEach(task => {
+                    if (task.createdAt) {
+                        const parts = task.createdAt.trim().split(/\s+/);
+                        const monthName = parts[0] || 'غير حدد';
+                        const yearName = parts[2] || '';
+                        const label = `${monthName} ${yearName}`.trim();
+                        stats[label] = (stats[label] || 0) + 1;
+                    }
+                });
+                return stats;
+            }, [tasks]);
+
+            // فلترة المهام المعروضة بناءً على الشهر والأولوية والبحث المحددة
+            const filteredTasks = useMemo(() => {
+                return tasks.filter(task => {
+                    // فلترة الشهر
+                    let matchMonth = true;
+                    if (selectedMonth !== 'الكل') {
+                        const parts = task.createdAt.trim().split(/\s+/);
+                        const label = `${parts[0]} ${parts[2]}`.trim();
+                        matchMonth = label === selectedMonth;
+                    }
+                    // فلترة الأولوية
+                    let matchPriority = true;
+                    if (selectedPriority !== 'الكل') {
+                        matchPriority = task.priority === selectedPriority;
+                    }
+                    // فلترة البحث
+                    let matchSearch = true;
+                    if (searchQuery.trim() !== '') {
+                        const query = searchQuery.toLowerCase();
+                        matchSearch = task.title.toLowerCase().includes(query) || 
+                                      task.id.includes(query) || 
+                                      task.owner.toLowerCase().includes(query);
+                    }
+                    return matchMonth && matchPriority && matchSearch;
+                });
+            }, [tasks, selectedMonth, selectedPriority, searchQuery]);
+
+            // دالة مطورة لحساب الأيام الخالية من المهام مع استثناء كامل النطاق الزمني للمهام
+            const emptyDaysList = useMemo(() => {
+                if (tasks.length < 2) return [];
+                
+                // تجميع كل التواريخ النشطة بناءً على النطاق الزمني لكل مهمة
+                const activeDates = new Set();
+                const timestamps = [];
+
+                tasks.forEach(t => {
+                    // إذا كان للمهمة نطاق زمني مستخرج (تواريخ YYYY-MM-DD)
+                    if (t.parsedDates && t.parsedDates.length > 0) {
+                        const times = t.parsedDates.map(dStr => new Date(dStr).getTime()).filter(time => !isNaN(time));
+                        if (times.length > 0) {
+                            const minT = Math.min(...times);
+                            const maxT = Math.max(...times);
+                            
+                            // إدراج النطاق في الجدول الزمني الكلي لتحديد بداية ونهاية مساحة العمل
+                            timestamps.push(minT, maxT);
+
+                            // تلوين/تفعيل كافة الأيام الواقعة في هذا النطاق كأيام عمل (ممتلئة)
+                            let curr = minT;
+                            const oneDay = 24 * 60 * 60 * 1000;
+                            while (curr <= maxT) {
+                                const d = new Date(curr);
+                                const formatted = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                                activeDates.add(formatted);
+                                curr += oneDay;
+                            }
+                        }
+                    } else if (t.timestamp > 0) {
+                        // كحالة احتياطية إذا لم يتوفر نطاق زمني، يتم استخدام تاريخ الإنشاء
+                        timestamps.push(t.timestamp);
+                        const d = new Date(t.timestamp);
+                        const formatted = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                        activeDates.add(formatted);
+                    }
+                });
+
+                if (timestamps.length === 0) return [];
+                const minTime = Math.min(...timestamps);
+                const maxTime = Math.max(...timestamps);
+
+                const oneDay = 24 * 60 * 60 * 1000;
+                let emptyDays = [];
+                let current = minTime + oneDay;
+
+                while (current < maxTime) {
+                    const d = new Date(current);
+                    const formatted = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    
+                    // إذا كان اليوم فارغاً وليس مسجلاً ضمن أي نطاق مهمة
+                    if (!activeDates.has(formatted)) {
+                        const dayOfWeek = d.getDay();
+                        // التحقق من أن يوم الأسبوع هذا نشط (لم يتم حذفه من الفلتر)
+                        if (activeWeekdays[dayOfWeek]) {
+                            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                            const arabicFormatted = d.toLocaleDateString('ar-SA', options);
+                            emptyDays.push({
+                                iso: formatted,
+                                arabic: arabicFormatted
+                            });
+                        }
+                    }
+                    current += oneDay;
+                }
+                return emptyDays;
+            }, [tasks, activeWeekdays]);
+
+            // تصدير البيانات إلى إكسل
+            const exportToCSV = () => {
+                let csvContent = '\uFEFF'; // BOM لدعم اللغة العربية في إكسل
+                csvContent += "المعرف,اسم المهمة,النسبة,الأولوية,الحالة,عدد المرفقات,المالك,المنشئ,النطاق الزمني,تاريخ الإنشاء\n";
+                
+                tasks.forEach(task => {
+                    let row = [
+                        `"${task.id}"`,
+                        `"${task.title.replace(/"/g, '""')}"`,
+                        `"${task.progress}"`,
+                        `"${task.priority}"`,
+                        `"${task.status}"`,
+                        `"${task.attachmentsCount}"`,
+                        `"${task.owner}"`,
+                        `"${task.creator}"`,
+                        `"${task.dateRange}"`,
+                        `"${task.createdAt}"`
+                    ].join(',');
+                    csvContent += row + "\n";
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", "تحليل_مهام_درعه.csv");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            return (
+                <div className="min-h-screen relative p-4 md:p-8">
+                    
+                    {/* Header */}
+                    <header className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8 glass rounded-2xl p-6">
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-blue via-brand-light to-brand-neon flex items-center justify-center shadow-[0_0_20px_rgba(0,110,255,0.6)]">
+                                <i className="ph ph-chart-bar text-3xl text-white"></i>
+                            </div>
+                            <div>
+                                <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-wide">لوحة تحليل المهام التفاعلية</h1>
+                                <p className="text-brand-neon text-sm font-semibold mt-1 flex items-center gap-1">
+                                    <span className="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
+                                    محلل ذكي فائق الأداء (متوافق مع الهيكل الجديد)
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-3">
+                            {tasks.length > 0 && (
+                                <button 
+                                    onClick={handleReset}
+                                    className="flex items-center gap-2 bg-red-600/30 hover:bg-red-600 border border-red-500/50 hover:border-red-500 text-white px-5 py-2.5 rounded-xl font-bold transition-all"
+                                >
+                                    <i className="ph ph-trash-simple text-lg"></i>
+                                    ابدأ من جديد
+                                </button>
+                            )}
+
+                            {step === 'timeline' && (
+                                <>
+                                    <button 
+                                        onClick={() => setShowEmptyDaysModal(true)}
+                                        className="flex items-center gap-2 bg-brand-purple/20 hover:bg-brand-purple border border-brand-purple/50 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:shadow-[0_0_25px_rgba(139,92,246,0.5)]"
+                                    >
+                                        <i className="ph ph-calendar-x text-lg"></i>
+                                        أيام بدون مهام ({emptyDaysList.length})
+                                    </button>
+
+                                    <button 
+                                        onClick={exportToCSV}
+                                        className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-green-500 hover:from-emerald-500 hover:to-green-400 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                                    >
+                                        <i className="ph ph-file-csv text-xl"></i>
+                                        تصدير إكسيل
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </header>
+
+                    {/* Step 1: Input Page */}
+                    {step === 'input' && (
+                        <div className="max-w-4xl mx-auto glass rounded-3xl p-6 md:p-8 animate-fade-in">
+                            <h2 className="text-2xl font-bold mb-3 flex items-center gap-2 text-brand-neon">
+                                <i className="ph ph-clipboard-text"></i>
+                                الصق بيانات المهام هنا
+                            </h2>
+                            <p className="text-gray-400 mb-6 text-sm">قم بنسخ أي عدد من المهام أو الجدول كاملاً من النظام والصقه هنا. يدعم النظام سحب جميع الأعمدة المطورة (المعينين، المرفقات، المالك، الأولوية) وسيرتبها تنازلياً وتصاعدياً.</p>
+                            
+                            <textarea 
+                                value={currentInput}
+                                onChange={(e) => setCurrentInput(e.target.value)}
+                                className="w-full h-72 bg-[#050a18]/70 border border-brand-blue/30 rounded-2xl p-5 text-white focus:outline-none focus:border-brand-neon focus:ring-2 focus:ring-brand-blue/20 transition-all resize-none placeholder-gray-600 mb-6 text-sm font-mono leading-relaxed"
+                                placeholder="الصق بيانات الجدول المنسوخة هنا..."
+                                dir="rtl"
+                            ></textarea>
+                            
+                            <div className="flex justify-end">
+                                <button 
+                                    onClick={handleProcessText}
+                                    disabled={!currentInput.trim()}
+                                    className="bg-brand-blue hover:bg-brand-light disabled:opacity-40 disabled:cursor-not-allowed text-white px-8 py-3.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(0,85,255,0.4)] hover:shadow-[0_0_25px_rgba(0,85,255,0.7)]"
+                                >
+                                    تحليل واستخراج البيانات
+                                    <i className="ph ph-arrow-left font-bold"></i>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 2: Multi-Page Inquiry */}
+                    {step === 'ask_more' && (
+                        <div className="max-w-md mx-auto glass rounded-3xl p-8 text-center animate-fade-in mt-12">
+                            <div className="w-20 h-20 bg-gradient-to-tr from-brand-blue to-brand-neon rounded-full flex items-center justify-center mx-auto mb-6 text-white text-4xl shadow-[0_0_25px_rgba(0,212,255,0.4)]">
+                                <i className="ph ph-cloud-arrow-up"></i>
+                            </div>
+                            <h2 className="text-2xl font-bold mb-2">تم سحب الصفحة بنجاح!</h2>
+                            <p className="text-gray-300 text-sm mb-6">لقد قمنا باستخراج <span className="text-brand-neon font-extrabold text-lg">{tasks.length}</span> مهمة بنجاح حتى الآن.</p>
+                            
+                            <div className="p-4 bg-brand-blue/10 border border-brand-blue/30 rounded-xl mb-8">
+                                <h4 className="font-bold text-sm text-brand-light mb-1">هل توجد صفحة أخرى تريد نسخها وتجميعها؟</h4>
+                                <p className="text-xs text-gray-400">يمكنك الذهاب للصفحة التالية بالموقع ونسخها لإضافتها لنفس التقرير.</p>
+                            </div>
+                            
+                            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                                <button 
+                                    onClick={() => setStep('input')}
+                                    className="flex-1 border-2 border-brand-blue/60 hover:border-brand-blue bg-brand-blue/5 hover:bg-brand-blue/20 text-brand-neon px-6 py-3 rounded-xl font-bold transition-all"
+                                >
+                                    نعم، إضافة صفحة أخرى
+                                </button>
+                                <button 
+                                    onClick={handleFinish}
+                                    className="flex-1 bg-brand-blue hover:bg-brand-light text-white px-6 py-3 rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(0,85,255,0.4)]"
+                                >
+                                    لا، توليد الخط الزمني
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 3: Main Timeline Dashboard */}
+                    {step === 'timeline' && (
+                        <div className="animate-fade-in">
+                            
+                            {/* إحصائيات الأشهر التفاعلية */}
+                            <section className="glass rounded-3xl p-6 mb-8">
+                                <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-brand-neon">
+                                    <i className="ph ph-chart-pie-slice"></i>
+                                    إحصائيات المهام لكل شهر (اضغط لتصفية الخط الزمني)
+                                </h3>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                                    
+                                    {/* زر الكل */}
+                                    <div 
+                                        onClick={() => setSelectedMonth('الكل')}
+                                        className={`cursor-pointer p-4 rounded-2xl text-center transition-all border ${selectedMonth === 'الكل' ? 'bg-brand-blue/30 border-brand-neon shadow-[0_0_15px_rgba(0,212,255,0.3)]' : 'bg-[#050a18]/40 border-white/5 hover:border-white/20'}`}
+                                    >
+                                        <div className="text-sm font-bold mb-1">كافة الشهور</div>
+                                        <div className="text-2xl font-extrabold text-brand-neon">{tasks.length}</div>
+                                        <span className="text-[10px] text-gray-400">إجمالي المهام</span>
+                                    </div>
+
+                                    {/* توليد باقي الشهور ديناميكياً */}
+                                    {Object.entries(monthlyStats).map(([month, count]) => (
+                                        <div 
+                                            key={month}
+                                            onClick={() => setSelectedMonth(month)}
+                                            className={`cursor-pointer p-4 rounded-2xl text-center transition-all border ${selectedMonth === month ? 'bg-brand-blue/30 border-brand-neon shadow-[0_0_15px_rgba(0,212,255,0.3)]' : 'bg-[#050a18]/40 border-white/5 hover:border-white/20'}`}
+                                        >
+                                            <div className="text-sm font-bold mb-1 truncate">{month}</div>
+                                            <div className="text-2xl font-extrabold text-brand-light">{count}</div>
+                                            <span className="text-[10px] text-gray-400">مهمة</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            {/* الفلترة حسب الأولوية وتعديل العرض وسرعة البحث */}
+                            <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8 glass rounded-2xl p-4">
+                                <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-sm text-gray-400 font-bold">الأولوية:</span>
+                                        <div className="flex bg-brand-dark/50 p-1 rounded-xl border border-white/10">
+                                            {['الكل', 'High', 'Medium', 'Low'].map(prio => (
+                                                <button
+                                                    key={prio}
+                                                    onClick={() => setSelectedPriority(prio)}
+                                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedPriority === prio ? 'bg-brand-blue text-white shadow-md' : 'text-gray-400 hover:text-white'}`}
+                                                >
+                                                    {prio === 'الكل' ? 'الكل' : prio}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    
+                                    {/* شريط البحث */}
+                                    <div className="relative w-full md:w-64">
+                                        <input 
+                                            type="text" 
+                                            placeholder="ابحث باسم المهمة، المعرف..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            className="w-full bg-[#050a18]/70 border border-brand-blue/30 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-brand-neon focus:ring-1 focus:ring-brand-neon transition-all pr-4 pl-10"
+                                            dir="rtl"
+                                        />
+                                        <i className="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg"></i>
+                                    </div>
+                                </div>
+
+                                <div className="text-sm text-gray-400">
+                                    يعرض حالياً: <span className="text-brand-neon font-bold">{filteredTasks.length}</span> مهمة من أصل <span className="text-white font-bold">{tasks.length}</span>
+                                </div>
+                            </div>
+
+                            {/* خط زمني زجزاج عمودي مبهر */}
+                            <div className="max-w-4xl mx-auto py-8 relative">
+                                
+                                {filteredTasks.length === 0 ? (
+                                    <div className="text-center py-20 glass rounded-3xl">
+                                        <i className="ph ph-folder-open text-6xl text-gray-600 mb-4 block"></i>
+                                        <p className="text-gray-400 text-lg">لا توجد مهام تطابق خيارات الفلترة المحددة.</p>
+                                    </div>
+                                ) : (
+                                    <div className="relative w-full flex flex-col-reverse gap-12">
+                                        
+                                        {/* الخط الرأسي المتوهج بالمنتصف */}
+                                        <div className="absolute right-1/2 translate-x-1/2 w-[3px] h-full bg-gradient-to-b from-brand-neon via-brand-blue to-transparent rounded-full opacity-60 z-0"></div>
+
+                                        {filteredTasks.map((task, index) => {
+                                            const isRight = index % 2 === 0;
+                                            const isHigh = task.priority === 'High';
+                                            const isLow = task.priority === 'Low';
+
+                                            return (
+                                                <div 
+                                                    key={task.id} 
+                                                    className={`relative flex items-center w-full ${isRight ? 'justify-start' : 'justify-end'} animate-fade-in`}
+                                                    style={{ animationDelay: `${index * 0.05}s` }}
+                                                >
+                                                    {/* النقطة المركزية الفعالة على الخط */}
+                                                    <div className={`absolute right-1/2 translate-x-1/2 w-6 h-6 rounded-full bg-[#030611] border-4 z-10 transition-all cursor-pointer ${isHigh ? 'border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.8)]' : isLow ? 'border-gray-500' : 'border-brand-neon shadow-[0_0_12px_rgba(0,212,255,0.8)]'}`}></div>
+                                                    
+                                                    {/* كارت المهمة الزجاجي الشفاف الجانبي */}
+                                                    <div className={`w-[45%] ${isRight ? 'pl-4' : 'pr-4'}`}>
+                                                        <div 
+                                                            onClick={() => setSelectedTask(task)}
+                                                            className="glass-card p-5 rounded-2xl cursor-pointer hover:scale-[1.02] transition-all duration-300 relative group text-right"
+                                                        >
+                                                            {/* الهيدر المصغر للكارت */}
+                                                            <div className="flex justify-between items-center mb-3 text-xs">
+                                                                <span className="bg-brand-blue/30 text-brand-neon px-2 py-0.5 rounded-md font-mono font-bold">#{task.id}</span>
+                                                                <span className="text-gray-400 flex items-center gap-1">
+                                                                    <i className="ph ph-clock"></i>
+                                                                    {task.createdAt.split(' ')[0]} {task.createdAt.split(' ')[1]}
+                                                                </span>
+                                                            </div>
+
+                                                            {/* عنوان المهمة بالكامل */}
+                                                            <h4 className="text-base font-bold text-white leading-snug group-hover:text-brand-light transition-colors mb-4 line-clamp-2">
+                                                                {task.title || 'مهمة بدون عنوان'}
+                                                            </h4>
+
+                                                            {/* معلومات سريعة أسفل البطاقة */}
+                                                            <div className="flex justify-between items-center pt-3 border-t border-white/5 text-xs">
+                                                                <div className="flex items-center gap-1 text-gray-400">
+                                                                    <i className="ph ph-users text-sm text-brand-neon"></i>
+                                                                    <span className="truncate max-w-[100px]">{task.assignees[0] || 'غير معين'}</span>
+                                                                </div>
+                                                                <span className={`px-2 py-0.5 rounded font-bold ${isHigh ? 'bg-red-500/10 text-red-400' : 'bg-brand-blue/10 text-brand-light'}`}>
+                                                                    {task.priority}
+                                                                </span>
+                                                            </div>
+
+                                                            {/* شريط التقدم اللطيف */}
+                                                            <div className="mt-3">
+                                                                <div className="w-full bg-brand-dark rounded-full h-1">
+                                                                    <div className="bg-brand-neon h-1 rounded-full" style={{ width: task.progress }}></div>
+                                                                </div>
+                                                                <div className="text-left text-[10px] text-brand-light mt-1">{task.progress} إنجاز</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                </div>
+                                            );
+                                        })}
+
+                                    </div>
+                                )}
+
+                                {/* مؤشر البداية الأقدم في أسفل الصفحة */}
+                                <div className="flex flex-col items-center mt-12 text-gray-500 relative z-10">
+                                    <div className="w-5 h-5 rounded-full bg-brand-blue/40 border border-brand-blue/80 flex items-center justify-center mb-2">
+                                        <div className="w-2 h-2 rounded-full bg-brand-neon"></div>
+                                    </div>
+                                    <span className="text-xs font-bold text-brand-light">نقطة البداية الزمنية (الأقدم)</span>
+                                </div>
+
+                            </div>
+                        </div>
+                    )}
+
+                    {/* نافذة عرض تفاصيل المهمة المطورة بجميع البيانات والأعمدة */}
+                    {selectedTask && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in" onClick={() => setSelectedTask(null)}>
+                            <div 
+                                className="glass rounded-3xl w-full max-w-2xl border-2 border-brand-blue/30 overflow-hidden relative shadow-[0_0_50px_rgba(0,85,255,0.3)]"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-brand-neon via-brand-blue to-brand-purple"></div>
+                                
+                                <div className="p-6 md:p-8">
+                                    <div className="flex justify-between items-start gap-4 mb-6">
+                                        <div>
+                                            <div className="flex flex-wrap gap-2 items-center mb-2">
+                                                <span className="bg-brand-blue text-white px-3 py-1 rounded-lg text-xs font-mono font-bold">#{selectedTask.id}</span>
+                                                <span className={`px-3 py-1 rounded-lg text-xs font-bold ${selectedTask.priority === 'High' ? 'bg-red-500/20 text-red-400' : 'bg-brand-blue/20 text-brand-neon'}`}>
+                                                    أولوية: {selectedTask.priority}
+                                                </span>
+                                                <span className="bg-white/5 text-gray-300 px-3 py-1 rounded-lg text-xs font-medium">
+                                                    المرفقات: {selectedTask.attachmentsCount}
+                                                </span>
+                                            </div>
+                                            <h2 className="text-xl md:text-2xl font-bold text-white mt-3 leading-snug">{selectedTask.title}</h2>
+                                        </div>
+                                        <button onClick={() => setSelectedTask(null)} className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/15 flex items-center justify-center transition-colors">
+                                            <i className="ph ph-x text-xl"></i>
+                                        </button>
+                                    </div>
+
+                                    {/* تفاصيل الحقول المستخرجة بالكامل */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 text-sm">
+                                        
+                                        <div className="bg-brand-dark/60 p-4 rounded-2xl border border-white/5">
+                                            <span className="text-gray-400 text-xs block mb-1">تاريخ الإنشاء</span>
+                                            <span className="text-white font-semibold flex items-center gap-2">
+                                                <i className="ph ph-calendar text-brand-neon text-base"></i>
+                                                {selectedTask.createdAt}
+                                            </span>
+                                        </div>
+
+                                        <div className="bg-brand-dark/60 p-4 rounded-2xl border border-white/5">
+                                            <span className="text-gray-400 text-xs block mb-1">الحالة الحالية</span>
+                                            <span className="text-white font-semibold flex items-center gap-2">
+                                                <i className="ph ph-shield-check text-brand-neon text-base"></i>
+                                                {selectedTask.status}
+                                            </span>
+                                        </div>
+
+                                        <div className="bg-brand-dark/60 p-4 rounded-2xl border border-white/5">
+                                            <span className="text-gray-400 text-xs block mb-1">مالك المهمة</span>
+                                            <span className="text-white font-semibold flex items-center gap-2">
+                                                <i className="ph ph-crown text-brand-neon text-base"></i>
+                                                {selectedTask.owner}
+                                            </span>
+                                        </div>
+
+                                        <div className="bg-brand-dark/60 p-4 rounded-2xl border border-white/5">
+                                            <span className="text-gray-400 text-xs block mb-1">أنشأها</span>
+                                            <span className="text-white font-semibold flex items-center gap-2">
+                                                <i className="ph ph-user-plus text-brand-neon text-base"></i>
+                                                {selectedTask.creator}
+                                            </span>
+                                        </div>
+
+                                        <div className="bg-brand-dark/60 p-4 rounded-2xl border border-white/5 md:col-span-2">
+                                            <span className="text-gray-400 text-xs block mb-1">النطاق الزمني للتنفيذ</span>
+                                            <span className="text-white font-semibold flex items-center gap-2" dir="ltr">
+                                                <i className="ph ph-calendar-range text-brand-neon text-base"></i>
+                                                {selectedTask.dateRange}
+                                            </span>
+                                        </div>
+
+                                        <div className="bg-brand-dark/60 p-4 rounded-2xl border border-white/5 md:col-span-2">
+                                            <span className="text-gray-400 text-xs block mb-2">المعينون للمهمة ({selectedTask.assignees.length})</span>
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedTask.assignees.map((name, i) => (
+                                                    <span key={i} className="bg-brand-blue/15 border border-brand-blue/30 text-white px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5">
+                                                        <i className="ph ph-circle bg-brand-neon w-2 h-2 rounded-full"></i>
+                                                        {name}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-brand-dark/60 p-4 rounded-2xl border border-white/5 md:col-span-2">
+                                            <div className="flex justify-between text-xs mb-2">
+                                                <span className="text-gray-400">التقدم الدائري ونسبة الإنجاز</span>
+                                                <span className="text-brand-neon font-bold">{selectedTask.progress}</span>
+                                            </div>
+                                            <div className="w-full bg-white/5 rounded-full h-2">
+                                                <div className="bg-gradient-to-l from-brand-neon to-brand-blue h-2 rounded-full" style={{ width: selectedTask.progress }}></div>
+                                            </div>
+                                        </div>
+
+                                    </div>
+
+                                    <div className="flex justify-end mt-6">
+                                        <button 
+                                            onClick={() => setSelectedTask(null)}
+                                            className="bg-brand-blue hover:bg-brand-light text-white font-bold px-6 py-2.5 rounded-xl transition-all"
+                                        >
+                                            إغلاق
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* نافذة عرض الأيام الخالية بدون مهام - مدمج معها فلتر أيام الأسبوع التفاعلي */}
+                    {showEmptyDaysModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in" onClick={() => setShowEmptyDaysModal(false)}>
+                            <div 
+                                className="glass rounded-3xl w-full max-w-lg border border-brand-purple/40 overflow-hidden relative shadow-[0_0_40px_rgba(139,92,246,0.3)]"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="absolute top-0 left-0 w-full h-2 bg-brand-purple"></div>
+                                
+                                <div className="p-6 md:p-8">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                            <i className="ph ph-calendar-x text-brand-purple text-2xl"></i>
+                                            أيام خالية بدون أي مهام
+                                        </h3>
+                                        <button onClick={() => setShowEmptyDaysModal(false)} className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/15 flex items-center justify-center transition-colors">
+                                            <i className="ph ph-x text-xl"></i>
+                                        </button>
+                                    </div>
+
+                                    {/* لوحة تحديد أيام الأسبوع لاستثنائها */}
+                                    <div className="bg-brand-dark/40 p-4 rounded-2xl border border-white/5 mb-5 text-right">
+                                        <p className="text-xs text-gray-400 mb-3 font-semibold flex items-center gap-1">
+                                            <i className="ph ph-funnel text-brand-purple"></i>
+                                            تضمين أيام الأسبوع في الحساب:
+                                        </p>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                            {weekdayNames.map(day => (
+                                                <label key={day.id} className="flex items-center gap-2 text-xs text-white cursor-pointer hover:text-brand-neon transition-colors select-none">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={activeWeekdays[day.id]}
+                                                        onChange={() => setActiveWeekdays(prev => ({ ...prev, [day.id]: !prev[day.id] }))}
+                                                        className="rounded border-brand-blue bg-brand-dark/80 text-brand-purple focus:ring-brand-neon w-4 h-4 cursor-pointer"
+                                                    />
+                                                    <span>{day.name}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <p className="text-xs text-gray-400 mb-3">الأيام الفارغة المكتشفة التي لا يقع ضمنها أي نطاق زمني للمهام:</p>
+
+                                    <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                                        {emptyDaysList.length === 0 ? (
+                                            <p className="text-gray-500 text-center py-8 text-xs font-semibold">لا توجد أيام خالية تطابق الفلترة المحددة!</p>
+                                        ) : (
+                                            emptyDaysList.map((day, idx) => (
+                                                <div key={idx} className="bg-brand-purple/10 border border-brand-purple/20 p-3 rounded-xl flex justify-between items-center text-xs animate-fade-in">
+                                                    <span className="text-white font-medium">{day.arabic}</span>
+                                                    <span className="text-brand-purple font-mono font-bold bg-brand-purple/20 px-2.5 py-1 rounded-lg">{day.iso}</span>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+
+                                    <div className="flex justify-end mt-6">
+                                        <button 
+                                            onClick={() => setShowEmptyDaysModal(false)}
+                                            className="bg-brand-purple hover:bg-purple-500 text-white font-bold px-6 py-2.5 rounded-xl transition-all"
+                                        >
+                                            إغلاق
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
